@@ -66,6 +66,7 @@ def train(n_epochs, population_size=50, learning_rate=0.001, sigma=0.1, n_worker
         print('%-10s | %-20s | %-20s | %-10s' % ('Epoch', 'Reward', 'Accuracy', 'Time(s)'))
         print('-' * 86)
         summary_writer = tf.summary.FileWriter('./summaries_es', sess.graph)
+        saver = tf.train.Saver()
 
         te_layer_params_0 = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='mnist_conv/layer1')
         te_w_0 = te_layer_params_0[0]
@@ -113,11 +114,42 @@ def train(n_epochs, population_size=50, learning_rate=0.001, sigma=0.1, n_worker
         mnist_test_images = dataset.test.images
         mnist_test_labels = dataset.test.labels
         w_0, b_0 = unflatten_params(params_0, w_0.shape, b_0.shape)
+        saver.save(sess, "./saved_models/mnist_es.ckpt")
+        np.save("./saved_models/mnist_es_w_0.npy", w_0)
+        np.save("./saved_models/mnist_es_b_0.npy", b_0)
         overall_acc = 0.0
         for i in range(0, len(mnist_test_images), BATCH_SIZE):
             overall_acc += sess.run(te_accuracy, {tp_input: mnist_test_images[i:i + BATCH_SIZE], tp_labels: mnist_test_labels[i:i + BATCH_SIZE], te_w_0: w_0, te_b_0: b_0})
-        print('\nFinal test accuracy: %g' % (overall_acc * 100 / len(mnist_test_images)))
+        print('\nFinal test accuracy: %g' % (overall_acc * BATCH_SIZE / len(mnist_test_images)))
+
+
+def test():
+    dataset = input_data.read_data_sets('MNIST_data', one_hot=True)
+    with tf.Graph().as_default():
+        tp_input, tp_labels = placeholders()
+        te_inference = inference(tp_input)
+        te_accuracy = accuracy(te_inference, tp_labels)
+        init = tf.global_variables_initializer()
+        config = tf.ConfigProto(
+            device_count={'GPU': 0}
+        )
+        sess = tf.Session(config=config)
+        sess.run(init)
+        te_layer_params_0 = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='mnist_conv/layer1')
+        te_w_0 = te_layer_params_0[0]
+        te_b_0 = te_layer_params_0[1]
+
+        mnist_test_images = dataset.train.images
+        mnist_test_labels = dataset.train.labels
+
+        w_0 = np.load("./saved_models/mnist_es_w_0.npy")
+        b_0 = np.load("./saved_models/mnist_es_b_0.npy")
+
+        overall_acc = 0.0
+        for i in range(0, len(mnist_test_images), BATCH_SIZE):
+            overall_acc += sess.run(te_accuracy, {tp_input: mnist_test_images[i:i + BATCH_SIZE], tp_labels: mnist_test_labels[i:i + BATCH_SIZE], te_w_0: w_0, te_b_0: b_0})
+        print('\nFinal test accuracy: %g' % (overall_acc * BATCH_SIZE / len(mnist_test_images)))
 
 if __name__ == '__main__':
-    train(100000, population_size=50, n_workers=25)
-
+    #train(10000, population_size=50, n_workers=5)
+    test()

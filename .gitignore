@@ -1,4 +1,3 @@
 *.pyc
-summaries_*/
 .idea/
 MNIST_data/

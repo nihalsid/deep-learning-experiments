@@ -66,6 +66,7 @@ def run_training(nepochs):
         tf.summary.scalar('loss', te_loss)
         merged = tf.summary.merge_all()
         summary_writer = tf.summary.FileWriter('./summaries_bp', sess.graph)
+        saver = tf.train.Saver()
 
         duration = 0
         print('%-10s | %-20s | %-20s | %-10s' % ('Epoch', 'Loss', 'Accuracy', 'Time(s)'))
@@ -85,14 +86,14 @@ def run_training(nepochs):
                 batch = dataset.train.next_batch(BATCH_SIZE)
                 print('%-10s | %-20s | %-20s | %-10s' % ('%d' % i, '%.5f' % val_loss, '%.5f' % sess.run(te_accuracy, {tp_input: batch[0], tp_labels: batch[1]}), '%.2f' % duration))
                 duration = 0
-
+        saver.save(sess, "./saved_models/mnist_bp.ckpt")
         # Evaluate Final Test Accuracy
         mnist_test_images = dataset.test.images
         mnist_test_labels = dataset.test.labels
         overall_acc = 0.0
         for i in range(0, len(mnist_test_images), BATCH_SIZE):
             overall_acc += sess.run(te_accuracy, {tp_input: mnist_test_images[i:i + BATCH_SIZE], tp_labels: mnist_test_labels[i:i + BATCH_SIZE]})
-        print('Final test accuracy: %g' % (overall_acc * 100 / len(mnist_test_images)))
+        print('Final test accuracy: %g' % (overall_acc * BATCH_SIZE / len(mnist_test_images)))
 
 if __name__=='__main__':
-    run_training(1000)
+    run_training(2000)
