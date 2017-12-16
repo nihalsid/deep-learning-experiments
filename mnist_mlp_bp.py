@@ -6,19 +6,13 @@ from tensorflow.examples.tutorials.mnist import input_data
 INPUT_DIMENSIONS = [28, 28, 1]
 BATCH_SIZE = 200
 LEARNING_RATE = 1e-4
-LOG_FREQUENCY = 100
+LOG_FREQUENCY = 1
 
 
 def inference(tp_input, reuse=False):
     with tf.variable_scope('mnist_conv', reuse=reuse):
-        tv_input_as_image = tf.reshape(tp_input, [-1,INPUT_DIMENSIONS[0],INPUT_DIMENSIONS[1],INPUT_DIMENSIONS[2]])
-        te_net = slim.conv2d(tv_input_as_image, 32, [5, 5], reuse=reuse)
-        te_net = slim.max_pool2d(te_net, [2, 2])
-        te_net = slim.conv2d(te_net, 64, [5, 5], reuse=reuse)
-        te_net = slim.max_pool2d(te_net, [2, 2])
-        te_net = slim.flatten(te_net)
-        te_net = slim.fully_connected(te_net, 1024, reuse=reuse)
-        te_net = slim.fully_connected(te_net, 10, activation_fn=None, reuse=reuse)
+        te_net = slim.fully_connected(tp_input, 128, activation_fn=tf.nn.relu, reuse=reuse, scope='layer1')
+        te_net = slim.fully_connected(te_net, 10, activation_fn=None, reuse=reuse, scope='layer2')
     return te_net
 
 
@@ -72,14 +66,13 @@ def run_training(nepochs):
         print('-' * 86)
 
         for i in range(nepochs):
-
-            batch = dataset.train.next_batch(BATCH_SIZE)
-            start_time = time.time()
-            # Training
-            summary, _, val_loss = sess.run([merged, te_train, te_loss], feed_dict={tp_input: batch[0], tp_labels: batch[1],})
-            duration += (time.time() - start_time)
-            summary_writer.add_summary(summary, i)
-
+            for _ in range(int(dataset.train.images.shape[0]/BATCH_SIZE)):
+                batch = dataset.train.next_batch(BATCH_SIZE)
+                start_time = time.time()
+                # Training
+                summary, _, val_loss = sess.run([merged, te_train, te_loss], feed_dict={tp_input: batch[0], tp_labels: batch[1],})
+                duration += (time.time() - start_time)
+                summary_writer.add_summary(summary, i)
             # Logging
             if i % LOG_FREQUENCY == 0:
                 batch = dataset.train.next_batch(BATCH_SIZE)
@@ -92,7 +85,7 @@ def run_training(nepochs):
         overall_acc = 0.0
         for i in range(0, len(mnist_test_images), BATCH_SIZE):
             overall_acc += sess.run(te_accuracy, {tp_input: mnist_test_images[i:i + BATCH_SIZE], tp_labels: mnist_test_labels[i:i + BATCH_SIZE]})
-        print('Final test accuracy: %g' % (overall_acc * 100 / len(mnist_test_images)))
+        print('Final test accuracy: %g' % (overall_acc * BATCH_SIZE / len(mnist_test_images)))
 
 if __name__=='__main__':
-    run_training(1000)
+    run_training(100)

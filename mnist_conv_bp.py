@@ -11,7 +11,14 @@ LOG_FREQUENCY = 100
 
 def inference(tp_input, reuse=False):
     with tf.variable_scope('mnist_conv', reuse=reuse):
-        te_net = slim.fully_connected(tp_input, 10, activation_fn=None, reuse=reuse, scope='layer1')
+        tv_input_as_image = tf.reshape(tp_input, [-1, INPUT_DIMENSIONS[0], INPUT_DIMENSIONS[1], INPUT_DIMENSIONS[2]])
+        te_net = slim.conv2d(tv_input_as_image, 32, [5, 5], reuse=reuse)
+        te_net = slim.max_pool2d(te_net, [2, 2])
+        te_net = slim.conv2d(te_net, 64, [5, 5], reuse=reuse)
+        te_net = slim.max_pool2d(te_net, [2, 2])
+        te_net = slim.flatten(te_net)
+        te_net = slim.fully_connected(te_net, 1024, reuse=reuse)
+        te_net = slim.fully_connected(te_net, 10, activation_fn=None, reuse=reuse)
     return te_net
 
 
