@@ -103,6 +103,7 @@ def train(n_epochs, population_size=50, learning_rate=0.01, sigma=0.01, n_worker
         print('%-10s | %-20s | %-20s | %-10s' % ('Step', 'Reward', 'Accuracy', 'Time(s)'))
         print('-' * 86)
         summary_writer = tf.summary.FileWriter('./summaries_es', sess.graph)
+        saver = tf.train.Saver()
 
         # create initial param vector
         te_layer_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='mnist_es')
@@ -170,10 +171,12 @@ def train(n_epochs, population_size=50, learning_rate=0.01, sigma=0.01, n_worker
         # evaluate Final Test Accuracy
         mnist_test_images = dataset.test.images
         mnist_test_labels = dataset.test.labels
+        np.save("./saved_models/mnist_es_params.npy", np.array(params))
         overall_acc = 0.0
         for i in range(0, len(mnist_test_images), BATCH_SIZE):
-            overall_acc += sess.run(te_accuracy, feed_dict=create_feed_dict(mnist_test_images[i:i + BATCH_SIZE], mnist_test_labels[i:i + BATCH_SIZE], params))
+            overall_acc += sess.run(te_accuracy, {tp_input: mnist_test_images[i:i + BATCH_SIZE], tp_labels: mnist_test_labels[i:i + BATCH_SIZE], te_w_0: w_0, te_b_0: b_0})
         print('\nFinal test accuracy: %g' % (overall_acc * BATCH_SIZE / len(mnist_test_images)))
+
 
 if __name__ == '__main__':
     train(1000, population_size=40, n_workers=1)
