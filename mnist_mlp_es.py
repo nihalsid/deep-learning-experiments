@@ -19,7 +19,7 @@ def inference_1_layer_mlp(tp_input, reuse=False):
 
 def inference_2_layer_mlp(tp_input, reuse=False):
     with tf.variable_scope('mnist_es', reuse=reuse):
-        te_net = slim.fully_connected(tp_input, 128, activation_fn=tf.nn.relu, reuse=reuse, scope='layer1')
+        te_net = slim.fully_connected(tp_input, 128, activation_fn=tf.nn.selu, reuse=reuse, scope='layer1')
         te_net = slim.fully_connected(te_net, 10, activation_fn=None, reuse=reuse, scope='layer2')
     return te_net
 
@@ -50,11 +50,11 @@ def iterate_minibatches(input_set, target_set, batch_size, shuffle=False):
             excerpt = slice(start_idx, start_idx + batch_size)
         yield input_set[excerpt], target_set[excerpt]
 
-
-def train(n_epochs, population_size=50, learning_rate=0.01, sigma=0.01, n_workers=4):
+#0.005, 0.01
+def train(n_epochs, population_size=50, learning_rate=0.001, sigma=0.01, n_workers=4, resume=False):
     dataset = input_data.read_data_sets('MNIST_data', one_hot=True)
-    train_images = dataset.train.images#[:200]
-    train_labels = dataset.train.labels#[:200]
+    train_images = dataset.train.images#[:600]
+    train_labels = dataset.train.labels#[:600]
 
     def fitness_shaping(rewards):
         """
@@ -108,8 +108,11 @@ def train(n_epochs, population_size=50, learning_rate=0.01, sigma=0.01, n_worker
         # create initial param vector
         te_layer_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='mnist_es')
         params = []
-        for te_p in te_layer_params:
-            params.append(sess.run(te_p))
+        if resume:
+            params = np.load("./saved_models/mnist_es_params.npy")
+        else:
+            for te_p in te_layer_params:
+                params.append(sess.run(te_p))
 
         # train for specified number of epochs
         for epoch in range(n_epochs):
@@ -174,9 +177,9 @@ def train(n_epochs, population_size=50, learning_rate=0.01, sigma=0.01, n_worker
         np.save("./saved_models/mnist_es_params.npy", np.array(params))
         overall_acc = 0.0
         for i in range(0, len(mnist_test_images), BATCH_SIZE):
-            overall_acc += sess.run(te_accuracy, {tp_input: mnist_test_images[i:i + BATCH_SIZE], tp_labels: mnist_test_labels[i:i + BATCH_SIZE], te_w_0: w_0, te_b_0: b_0})
+            overall_acc += sess.run(te_accuracy, feed_dict=create_feed_dict(mnist_test_images[i:i + BATCH_SIZE], mnist_test_labels[i:i + BATCH_SIZE], params))
         print('\nFinal test accuracy: %g' % (overall_acc * BATCH_SIZE / len(mnist_test_images)))
 
 
 if __name__ == '__main__':
-    train(1000, population_size=40, n_workers=1)
+    train(1500, population_size=40, n_workers=2, resume=True)
