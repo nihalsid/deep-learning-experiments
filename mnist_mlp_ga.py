@@ -1,3 +1,6 @@
+"""
+Genetic algorithm implementation for training a neural network - doesnt work, probably has some issues?
+"""
 import time
 import threading
 import math
@@ -8,39 +11,83 @@ from tensorflow.examples.tutorials.mnist import input_data
 import numpy as np
 
 INPUT_DIMENSIONS = [28, 28, 1]
-BATCH_SIZE = 2000
+# Hyper params
+BATCH_SIZE = 200
+NUM_GENERATIONS = 100
+MUTATION_POWER = 0.005
+POP_SIZE = 500
+NUM_SELECTED_IND = 10
+# Display log messages after every LOG_FREQUENCY iterations during training
 LOG_FREQUENCY = 1
 
+# Some MLP networks - can be replaced with deeper MLPs or Covnets
 
 def inference_1_layer_mlp(tp_input, reuse=False):
-    with tf.variable_scope('mnist_ga', reuse=reuse):
+    """
+    Construct the neural network with just 1 layer
+
+    :tp_input: input placeholder
+    :return: output logits' expression
+    """
+    with tf.variable_scope('mnist_es', reuse=reuse):
         te_net = slim.fully_connected(tp_input, 10, activation_fn=None, reuse=reuse, scope='layer1')
     return te_net
 
 
 def inference_2_layer_mlp(tp_input, reuse=False):
-    with tf.variable_scope('mnist_ga', reuse=reuse):
-        te_net = slim.fully_connected(tp_input, 128, activation_fn=tf.nn.relu, reuse=reuse, scope='layer1')
+    """
+    Construct the neural network with just 2 layers
+
+    :tp_input: input placeholder
+    :return: output logits' expression
+    """
+    with tf.variable_scope('mnist_es', reuse=reuse):
+        te_net = slim.fully_connected(tp_input, 128, activation_fn=tf.nn.selu, reuse=reuse, scope='layer1')
         te_net = slim.fully_connected(te_net, 10, activation_fn=None, reuse=reuse, scope='layer2')
     return te_net
 
 
 def reward(te_inference, tp_labels):
+    """
+    Reward for the current inference, negative of the traditional loss
+
+    :te_inference: expression for logits
+    :tp_labels: placeholder for true labels
+    :return: reward expression 
+    """
     return -tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tp_labels, logits=te_inference))
 
 
 def accuracy(te_inference, tp_labels):
+    """
+    Construct accuracy expression
+
+    :te_inference: expression for logits
+    :tp_labels: true label placeholder
+    :return: accuracy expression
+    """
     te_correct_prediction = tf.equal(tf.argmax(te_inference, 1), tf.argmax(tp_labels, 1))
     return tf.reduce_mean(tf.cast(te_correct_prediction, tf.float32))
 
 
 def placeholders():
+    """
+    Creates placeholders for inputs and labels
+    """ 
     tp_input = tf.placeholder(tf.float32, shape=[None, INPUT_DIMENSIONS[0] * INPUT_DIMENSIONS[1]])
     tp_label = tf.placeholder(tf.float32, shape=[None, 10])
     return tp_input, tp_label
 
 
 def iterate_minibatches(input_set, target_set, batch_size, shuffle=False):
+    """
+    Generator to yield minibatches for a training set
+
+    :input_set: input feature set
+    :target_set: target labels for the features
+    :batch_size: batch size for minibatch
+    :shuffle: shuffle the data
+    """
     if shuffle:
         indices = np.arange(len(input_set))
         np.random.shuffle(indices)
@@ -53,16 +100,32 @@ def iterate_minibatches(input_set, target_set, batch_size, shuffle=False):
 
 
 def train(num_generations, mutation_power, pop_size, num_selected_ind, resume=False):
+    """
+    Train the neural network using a simple genetic algorithm
+
+    :num_generations: number of generations in GA
+    :mutation_power: std dev of perturbations
+    :pop_size: number of members in each population
+    :num_selected_ind: number of selected individuals from the population
+    :resume: load a saved model and resume from there
+    """
     def normalize_weights(w):
+        """
+        Normalize weights - a good initialization for GAs
+        """
         w *= 1.0 / np.sqrt(np.square(w).sum(axis=0, keepdims=True))
         return w
 
     def create_feed_dict(x, t, params):
+        """
+        Utility for creating feed dictionary
+        """
         f_dict = {tp_input: x, tp_labels: t}
         for te_l_p, param in zip(te_layer_params, params):
             f_dict[te_l_p] = param
         return f_dict
-
+    
+    # load dataset
     dataset = input_data.read_data_sets('MNIST_data', one_hot=True)
     # for now just work on subset of original dataset
     train_images = dataset.train.images[:2000]
@@ -114,6 +177,7 @@ def train(num_generations, mutation_power, pop_size, num_selected_ind, resume=Fa
             # include elite of previous generation as 1st member of new population
             next_gen_params[0] = params[param_index_sorted[0]]
             next_gen_fitness[0] = fitness[param_index_sorted[0]]
+            # do logging
             if g % LOG_FREQUENCY == 0:
                 print(fitness.shape)
                 summary_writer.add_summary(tf.Summary(value=[
@@ -139,4 +203,4 @@ def train(num_generations, mutation_power, pop_size, num_selected_ind, resume=Fa
 
 
 if __name__ == '__main__':
-    train(100, 0.005, 500, 10)
+    train(NUM_GENERATIONS, MUTATION_POWER, POP_SIZE, NUM_SELECTED_IND)

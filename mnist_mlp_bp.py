@@ -1,15 +1,27 @@
+'''
+Simple MLP neural network to classify MNIST dataset using ADAM optimiser
+'''
 import time
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 from tensorflow.examples.tutorials.mnist import input_data
 
 INPUT_DIMENSIONS = [28, 28, 1]
+# Hyper param
 BATCH_SIZE = 200
 LEARNING_RATE = 1e-4
+EPOCHS = 100
+# Display log messages after every LOG_FREQUENCY iterations during training
 LOG_FREQUENCY = 1
 
 
 def inference(tp_input, reuse=False):
+    """
+    Construct the neural network structure
+
+    :tp_input: Input placeholder
+    :return: output logits' expression
+    """
     with tf.variable_scope('mnist_conv', reuse=reuse):
         te_net = slim.fully_connected(tp_input, 128, activation_fn=tf.nn.relu, reuse=reuse, scope='layer1')
         te_net = slim.fully_connected(te_net, 10, activation_fn=None, reuse=reuse, scope='layer2')
@@ -17,26 +29,55 @@ def inference(tp_input, reuse=False):
 
 
 def loss(te_inference, tp_labels):
+    """
+    Construct loss expression
+
+    :te_inference: expression for logits
+    :tp_labels: placeholder for true labels
+    :return: loss expression 
+    """
     return tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tp_labels, logits=te_inference))
 
 
 def train(te_loss):
+    """
+    Contruct training expression
+
+    :te_loss: loss expression
+    :return: training expression
+    """
     tv_global_step = tf.Variable(0, name='global_step_d', trainable=False)
     return slim.learning.create_train_op(te_loss, tf.train.AdamOptimizer(learning_rate=LEARNING_RATE), global_step=tv_global_step)
 
 
 def accuracy(te_inference, tp_labels):
+    """
+    Construct accuracy expression
+
+    :te_inference: expression for logits
+    :tp_labels: true label placeholder
+    :return: accuracy expression
+    """
     te_correct_prediction = tf.equal(tf.argmax(te_inference, 1), tf.argmax(tp_labels, 1))
     return tf.reduce_mean(tf.cast(te_correct_prediction, tf.float32))
 
 
 def placeholders():
+    """
+    Creates placeholders for inputs and labels
+    """ 
     tp_input = tf.placeholder(tf.float32, shape=[None, INPUT_DIMENSIONS[0]*INPUT_DIMENSIONS[1]])
     tp_label = tf.placeholder(tf.float32, shape=[None, 10])
     return tp_input, tp_label
 
 
 def run_training(nepochs):
+    """
+    Train the network for given number of epochs
+    
+    :nepochs: number of epochs to traing for
+    :return: nothing
+    """
     dataset = input_data.read_data_sets('MNIST_data', one_hot=True)
     with tf.Graph().as_default():
         # Create placeholder
@@ -70,7 +111,7 @@ def run_training(nepochs):
             for _ in range(int(dataset.train.images.shape[0]/BATCH_SIZE)):
                 batch = dataset.train.next_batch(BATCH_SIZE)
                 start_time = time.time()
-                # Training
+                # Run the training operation and get the loss
                 summary, _, val_loss = sess.run([merged, te_train, te_loss], feed_dict={tp_input: batch[0], tp_labels: batch[1],})
                 duration += (time.time() - start_time)
                 summary_writer.add_summary(summary, i)
@@ -80,6 +121,7 @@ def run_training(nepochs):
                 print('%-10s | %-20s | %-20s | %-10s' % ('%d' % i, '%.5f' % val_loss, '%.5f' % sess.run(te_accuracy, {tp_input: batch[0], tp_labels: batch[1]}), '%.2f' % duration))
                 duration = 0
         saver.save(sess, "./saved_models/mnist_bp.ckpt")
+
         # Evaluate Final Test Accuracy
         mnist_test_images = dataset.test.images
         mnist_test_labels = dataset.test.labels

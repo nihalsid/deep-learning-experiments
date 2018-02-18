@@ -1,3 +1,6 @@
+"""
+Evolutionary strategies implementation for training a neural network
+"""
 import time
 import threading
 import math
@@ -7,17 +10,36 @@ from tensorflow.examples.tutorials.mnist import input_data
 import numpy as np
 
 INPUT_DIMENSIONS = [28, 28, 1]
+# Hyper params
 BATCH_SIZE = 200
+EPOCHS = 1500
+POP_SIZE = 50
+NUM_WORKERS = 2
+# Display log messages after every LOG_FREQUENCY iterations during training
 LOG_FREQUENCY = 1
 
 
+# Some MLP networks - can be replaced with deeper MLPs or Covnets
+
 def inference_1_layer_mlp(tp_input, reuse=False):
+    """
+    Construct the neural network with just 1 layer
+
+    :tp_input: input placeholder
+    :return: output logits' expression
+    """
     with tf.variable_scope('mnist_es', reuse=reuse):
         te_net = slim.fully_connected(tp_input, 10, activation_fn=None, reuse=reuse, scope='layer1')
     return te_net
 
 
 def inference_2_layer_mlp(tp_input, reuse=False):
+    """
+    Construct the neural network with just 2 layers
+
+    :tp_input: input placeholder
+    :return: output logits' expression
+    """
     with tf.variable_scope('mnist_es', reuse=reuse):
         te_net = slim.fully_connected(tp_input, 128, activation_fn=tf.nn.selu, reuse=reuse, scope='layer1')
         te_net = slim.fully_connected(te_net, 10, activation_fn=None, reuse=reuse, scope='layer2')
@@ -25,21 +47,46 @@ def inference_2_layer_mlp(tp_input, reuse=False):
 
 
 def reward(te_inference, tp_labels):
+    """
+    Reward for the current inference, negative of the traditional loss
+
+    :te_inference: expression for logits
+    :tp_labels: placeholder for true labels
+    :return: reward expression 
+    """
     return -tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tp_labels, logits=te_inference))
 
 
 def accuracy(te_inference, tp_labels):
+    """
+    Construct accuracy expression
+
+    :te_inference: expression for logits
+    :tp_labels: true label placeholder
+    :return: accuracy expression
+    """
     te_correct_prediction = tf.equal(tf.argmax(te_inference, 1), tf.argmax(tp_labels, 1))
     return tf.reduce_mean(tf.cast(te_correct_prediction, tf.float32))
 
 
 def placeholders():
+    """
+    Creates placeholders for inputs and labels
+    """ 
     tp_input = tf.placeholder(tf.float32, shape=[None, INPUT_DIMENSIONS[0] * INPUT_DIMENSIONS[1]])
     tp_label = tf.placeholder(tf.float32, shape=[None, 10])
     return tp_input, tp_label
 
 
 def iterate_minibatches(input_set, target_set, batch_size, shuffle=False):
+    """
+    Generator to yield minibatches for a training set
+
+    :input_set: input feature set
+    :target_set: target labels for the features
+    :batch_size: batch size for minibatch
+    :shuffle: shuffle the data
+    """
     if shuffle:
         indices = np.arange(len(input_set))
         np.random.shuffle(indices)
@@ -50,9 +97,20 @@ def iterate_minibatches(input_set, target_set, batch_size, shuffle=False):
             excerpt = slice(start_idx, start_idx + batch_size)
         yield input_set[excerpt], target_set[excerpt]
 
-#0.005, 0.01
+
 def train(n_epochs, population_size=50, learning_rate=0.001, sigma=0.01, n_workers=4, resume=False):
+    """
+    Train using ES algorithm, parallizes on a single CPU across multiple threads
+    
+    :n_epochs: number of training epochs
+    :population_size: size of population used in ES
+    :learning_rate: ES hyperparameter
+    :sigma: ES hyperparameter
+    :n_workers: number of parallel threads
+    """
+    # load the dataset
     dataset = input_data.read_data_sets('MNIST_data', one_hot=True)
+    # uncomment to use a smaller set
     train_images = dataset.train.images#[:600]
     train_labels = dataset.train.labels#[:600]
 
@@ -73,12 +131,18 @@ def train(n_epochs, population_size=50, learning_rate=0.001, sigma=0.01, n_worke
         return shaped_rewards
 
     def create_feed_dict(x, t, params):
+        """
+        Utility method to create a feed dictionary
+        """
         f_dict = {tp_input: x, tp_labels: t}
         for te_l_p, param in zip(te_layer_params, params):
             f_dict[te_l_p] = param
         return f_dict
 
     def worker(i, perturbed_params, rewards):
+        """
+        Runs the whole dataset with given params and return the reward with these params
+        """
         for batch in iterate_minibatches(train_images, train_labels, BATCH_SIZE, shuffle=True):
             rewards[i] += sess.run(te_reward, feed_dict=create_feed_dict(batch[0], batch[1], perturbed_params))
 
@@ -118,21 +182,26 @@ def train(n_epochs, population_size=50, learning_rate=0.001, sigma=0.01, n_worke
         for epoch in range(n_epochs):
             start_time = time.time()
 
+            # arrays for saving seeds, parameters and rewards
             seeds = []
             perturbed_params = []
             rewards = [0] * population_size
 
             for _ in range(int(population_size / 2)):
+                # save the seeds and params - the perturbations are in pairs, + and -
                 np.random.seed()
                 seeds.append(np.random.randint(2 ** 30))
                 seeds.append(seeds[-1])
                 perturbed_params.append([])
                 perturbed_params.append([])
                 np.random.seed(seeds[-1])
+
+                # perturbations are normal distribution samples with 0 mean 
                 for param in params:
                     perturbed_params[-2].append(param + sigma * np.random.normal(0, 1, param.shape))
                     perturbed_params[-1].append(param - sigma * np.random.normal(0, 1, param.shape))
 
+            # evaluate each perturbation to get the rewards
             for worker_batch_idx in range(int(population_size / n_workers)):
                 processes = []
                 for worker_idx in range(n_workers):
@@ -148,10 +217,11 @@ def train(n_epochs, population_size=50, learning_rate=0.001, sigma=0.01, n_worke
             summary_writer.add_summary(tf.Summary(value=[
                 tf.Summary.Value(tag="reward", simple_value=val_reward),
             ]), epoch)
+            
             # fitness shaping
             shaped_rewards = fitness_shaping(rewards)
 
-            # parameter update
+            # parameter update based on rewards
             sign = 1
             for pop_idx in range(int(population_size)):
                 np.random.seed(seeds[pop_idx])
@@ -182,4 +252,4 @@ def train(n_epochs, population_size=50, learning_rate=0.001, sigma=0.01, n_worke
 
 
 if __name__ == '__main__':
-    train(1500, population_size=40, n_workers=2, resume=True)
+    train(EPOCHS, population_size=POP_SIZE, n_workers=NUM_WORKERS, resume=True)
